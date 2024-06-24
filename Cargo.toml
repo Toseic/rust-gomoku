@@ -1,0 +1,8 @@
+[workspace]
+members = [ 
+    "game_client",
+    "game_server",
+]
+
+resolver = "1"
+
