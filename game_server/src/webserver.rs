@@ -3,52 +3,22 @@
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::error::Error;
-// use std::sync::{Arc, Mutex};
 
-pub async fn server() -> Result<(), Box<dyn Error>> {
-    // 绑定到局域网地址和端口
-    let addr = "0.0.0.0:8080".to_string();
-    let listener = TcpListener::bind(&addr).await?;
 
-    println!("Server running on {}", addr);
-    // let user_input_vector = Arc::new(Mutex::new(Vec::<u8>::new()));
-    // let shared_vector1 = Arc::clone(&user_input_vector);
-
-    loop {
-        let (socket, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            if let Err(e) = handle_client(socket).await {
-                eprintln!("Error handling client: {:?}", e);
-            }
-        });
-    }
+pub enum MessageType {
+    Init,
+    Update,
+    Win,
+    Lose,
 }
 
 
-
-pub async fn handle_client(mut socket: TcpStream) -> Result<(), Box<dyn Error>> {
-    let mut buf = [0; 1024];
-
-    loop {
-        let n = socket.read(&mut buf).await?;
-
-        if n == 0 {
-            return Ok(());
-        }
-
-        // 打印接收到的数据
-        println!("Received: {:?}", &buf[..n]);
-
-        // 回显接收到的数据
-        socket.write_all(&buf[..n]).await?;
-    }
-}
 
 pub async fn collect_socket(socket_vec: & mut Vec<TcpStream>) -> Result<(), Box<dyn Error>> {
     let addr = "0.0.0.0:8080".to_string();
     let listener = TcpListener::bind(&addr).await?;
 
-    for _ in 0..2 {
+    for _ in 0..2 { // todo: fix this
         let (socket, _) = listener.accept().await?;
         println!("receive a connection from {}", socket.peer_addr()?);
         socket_vec.push(socket);
@@ -58,42 +28,10 @@ pub async fn collect_socket(socket_vec: & mut Vec<TcpStream>) -> Result<(), Box<
 
 }
 
-
-pub async fn send_id_to_user() -> Result<(), Box<dyn Error>> {
-    let addr = "0.0.0.0:8080".to_string();
-    let listener = TcpListener::bind(&addr).await?;
-
-    println!("Server running on {}", addr);
-
-    for idx in 0..2 {
-        let (mut socket, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            let mut buf = [0; 1];
-            buf[0] = idx;
-            // 回显接收到的数据
-            let _ = socket.write_all(&buf[..1]).await;
-            
-        });
-    }
-    Ok(())
-}
-
-pub fn get_user_input() {
-
-}
+// pub const MAP_X: usize = 100;
+// pub const MAP_Y: usize = 40;
 
 
-
-// use webserver::webserver::server;
-pub const MAP_X: usize = 100;
-pub const MAP_Y: usize = 40;
-
-pub enum MessageType {
-    Init,
-    Update,
-    Win,
-    Lose,
-}
 
 pub async fn send_message_type(socket: &mut tokio::net::TcpStream, message_type: MessageType) {
     let buffer: [u8; 1] = match message_type {
@@ -164,4 +102,84 @@ pub async fn receive_user_input(socket: &mut tokio::net::TcpStream) -> [u8; 2] {
     let mut buffer = [0; 2];
     socket.read(&mut buffer).await.unwrap();
     buffer
+}
+
+pub fn check_if_any_winner(
+    _matrix: &Vec<Vec<u8>>,
+    user_id: usize
+) -> i32 {
+    let rows = _matrix.len();
+    let cols = _matrix[0].len();
+
+    for i in 0..rows {
+        let mut row_line_len = 0;
+        for j in 0..cols {
+            if j > 0 && _matrix[i][j] == user_id as u8 && _matrix[i][j-1] != user_id as u8 {
+                row_line_len = 0;
+            } else if _matrix[i][j] == user_id as u8 {
+                row_line_len += 1;
+            }
+            if row_line_len >= 4 {
+                return user_id as i32;
+            }
+        }
+    }
+    for j in 0..cols {
+        let mut col_line_len = 0;
+        for i in 0..rows {
+            if i > 0 && _matrix[i][j] == user_id as u8 && _matrix[i-1][j] != user_id as u8 {
+                col_line_len = 0;
+            } else if _matrix[i][j] == user_id as u8 {
+                col_line_len += 1;
+            }
+            if col_line_len >= 4 {
+                return user_id as i32;
+            }
+        }
+    }
+    for i in 0..rows {
+        for j in 0..cols {
+            if i > 0 && j > 0 && _matrix[i][j] == user_id as u8 && _matrix[i-1][j-1] == user_id as u8 {
+                let mut diag_line_len = 2;
+                let mut x = j as i32 - 1;
+                let mut y = i as i32 - 1;
+                while x >= 0 && y >= 0 && _matrix[y as usize][x as usize] == user_id as u8 {
+                    diag_line_len += 1;
+                    x -= 1;
+                    y -= 1;
+                }
+                x = j as i32 + 1;
+                y = i as i32 + 1;
+                while x < cols as i32 && y < rows as i32 && _matrix[y as usize][x as usize] == user_id as u8 {
+                    diag_line_len += 1;
+                    x += 1;
+                    y += 1;
+                }
+                if diag_line_len >= 6 {
+                    return user_id as i32;
+                }
+            }
+            if i > 0 && j < cols-1 && _matrix[i][j] == user_id as u8 && _matrix[i-1][j+1] == user_id as u8 {
+                let mut diag_line_len = 2;
+                let mut x = j as i32 + 1;
+                let mut y = i as i32 - 1;
+                while x < cols as i32 && y >= 0 && _matrix[y as usize][x as usize] == user_id as u8 {
+                    diag_line_len += 1;
+                    x += 1;
+                    y -= 1;
+                }
+                x = j as i32 - 1;
+                y = i as i32 + 1;
+                while x >= 0 && y < rows as i32 && _matrix[y as usize][x as usize] == user_id as u8 {
+                    diag_line_len += 1;
+                    x -= 1;
+                    y += 1;
+                }
+                if diag_line_len >= 6 {
+                    return user_id as i32;
+                }
+            }
+        }
+    }
+    -1
 }

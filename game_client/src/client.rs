@@ -3,7 +3,6 @@
 use tokio::net::TcpStream;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use std::error::Error;
-use tokio::time::{self, Duration};
 use ansi_term::Colour;
 use ansi_term::Style;
 
@@ -36,6 +35,9 @@ impl MapUnit {
 
 impl Map {
     pub fn new(size_: usize, x: usize, y: usize, term_x: usize, term_y: usize) -> Map {
+        if x > term_x || y > term_y {
+            panic!("map size is larger than terminal size");
+        }
         Map {
             buffer: vec![MapUnit::new(); size_],
             highlight_x: 0,
@@ -55,111 +57,6 @@ pub enum MessageType {
     Win,
     Lose,
 }
-
-pub async fn run_client() -> Result<(), Box<dyn Error>> {
-    // 连接到服务器
-    let addr = "127.0.0.1:8080".to_string(); // 替换为服务器的 IP 地址
-    let socket = TcpStream::connect(addr).await?;
-
-    println!("Connected to the server!");
-
-    let (mut rd, mut wr) = io::split(socket);
-
-    tokio::spawn(async move {
-        let mut stdin = io::stdin();
-        let mut buf = vec![0; 1024];
-
-        loop {
-            let n = stdin.read(&mut buf).await.expect("Failed to read from stdin");
-            if n == 0 {
-                return;
-            }
-
-            wr.write_all(&buf[0..n]).await.expect("Failed to write to socket");
-        }
-    });
-
-    let mut buf = vec![0; 1024];
-    loop {
-        let n = rd.read(&mut buf).await?;
-        if n == 0 {
-            return Ok(());
-        }
-
-        println!("Received from server: {:?}", &buf[..n]);
-    }
-}
-
-
-
-
-pub async fn _run_bot_client() -> Result<(), Box<dyn Error>> {
-    // 连接到服务器
-    let addr = "127.0.0.1:8080".to_string(); // 替换为服务器的 IP 地址
-    let socket = TcpStream::connect(addr).await?;
-
-    println!("Connected to the server!");
-
-    let (mut rd, mut wr) = io::split(socket);
-
-    tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(1)); // 每5秒发送一次
-        let message = "Hello from client!";
-
-        loop {
-            interval.tick().await;
-            if let Err(_e) = wr.write_all(message.as_bytes()).await {
-                // eprintln!("Failed to write to socket: {:?}", e);
-                eprint!("x");
-                return;
-            }
-            print!("*");
-        }
-    });
-
-    let mut buf = vec![0; 128];
-    loop {
-        let n = rd.read(&mut buf).await?;
-        if n == 0 {
-            return Ok(());
-        }
-
-        // println!("Received from server: {:?}", &buf[..n]);
-    }
-}
-
-// pub async fn run_bot_client() -> Result<(), Box<dyn Error>> {
-//     let result = async {
-//         _run_bot_client()?;
-//         Ok(())
-//     }.await;
-//     result
-    
-// }
-
-pub async fn launch_multi_client(client_num: i32) -> Result<(), Box<dyn Error>> {
-    let mut handles = vec![];
-
-    // 创建 10 个并发任务
-    for i in 0..client_num {
-        let handle = tokio::spawn(async move {
-            if let Err(e) = _run_bot_client().await {
-                eprintln!("Client {} encountered an error: {:?}", i, e);
-            }
-        });
-        handles.push(handle);
-    }
-
-    // 等待所有任务完成
-    for handle in handles {
-        handle.await?;
-    }
-
-    Ok(())
-}
-
-
-
 
 pub fn fresh_game_map(map: &Map) {
     use std::io::Write;
@@ -196,7 +93,24 @@ pub fn convert_map_into_buffer(
     let mut idx = 0;
     let buffer = &mut map.buffer;
 
+    // up border
+    for _ in 0..map.map_x+2 {
+        buffer[idx].ch = '@';
+        idx += 1;
+    }
+    if idx % map.term_x != 0 {
+        loop {
+            buffer[idx].ch = ' ';
+            idx += 1;
+            if idx % map.term_x == 0 {
+                break;
+            }
+        }
+    }
+
     for i in 0..map.map_y {
+        buffer[idx].ch = '@';
+        idx += 1;
         for j in 0..map.map_x {
             match matrix[i][j] {
                 0 => buffer[idx].ch = ' ',
@@ -212,7 +126,10 @@ pub fn convert_map_into_buffer(
             } 
             idx += 1;
         }
-        // println!("idx: {}", idx);
+
+        buffer[idx].ch = '@';
+        idx += 1;
+
         if idx % map.term_x == 0 {
             continue;
         }
@@ -223,49 +140,23 @@ pub fn convert_map_into_buffer(
                 break;
             }
         }
-        // println!("last idx: {}", idx);s
         
     }
 
+    for _ in 0..map.map_x+2 {
+        buffer[idx].ch = '@';
+        idx += 1;
+    }
+    if idx % map.term_x != 0 {
+        loop {
+            buffer[idx].ch = ' ';
+            idx += 1;
+            if idx % map.term_x == 0 {
+                break;
+            }
+        }
+    }
 
-    // for i in 0..15 {
-    //     for j in 0..15 {
-    //         match j == y -1 {
-    //             true => {
-    //                 buffer[idx] = '+' as u8;
-    //                 idx += 1;
-    //             }
-    //             false => {
-    //                 buffer[idx] = '+' as u8;
-    //                 buffer[idx+1] = '-' as u8;
-    //                 idx += 2;
-    //             }
-    //         }
-    //     }
-    //     for _ in 0..(x-31) {
-    //         buffer[idx] = ' ' as u8;
-    //         idx += 1;
-    //     }
-    //     for j in 0..15 {
-    //         buffer[idx] = '|' as u8;
-    //         idx += 1;
-    //         match matrix[i][j] {
-    //             0 => buffer[idx] = ' ' as u8,
-    //             1 => buffer[idx] = 'X' as u8,
-    //             2 => buffer[idx] = 'O' as u8,
-    //             _ => buffer[idx] = '?' as u8,
-    //         };
-    //         idx += 1;
-    //         if j == 14 {
-    //             buffer[idx] = '|' as u8;
-    //             idx += 1;
-    //         }
-    //     }
-    //     for _ in 0..(x-32) {
-    //         buffer[idx] = ' ' as u8;
-    //         idx += 1;
-    //     }
-    // }
 }
 
 pub fn set_unit_as_highlight(x_idx: usize, y_idx: usize, game_map: &mut Map, map_x: usize) {
@@ -318,7 +209,6 @@ pub fn get_user_cursor(
             }
         }
         set_unit_as_highlight(x_idx, y_idx, game_map, map_x);
-        // println!("x: {}, y: {}", game_map.highlight_x, game_map.highlight_y);
         convert_map_into_buffer(&matrix, game_map);
         fresh_game_map(&game_map);
     }
@@ -327,18 +217,14 @@ pub fn get_user_cursor(
 
 
 pub async fn comm_with_server(input: &[u8; 2]) -> Result<(), Box<dyn Error>> {
-    // 连接到服务器
-    let addr = "127.0.0.1:8080".to_string(); // 替换为服务器的 IP 地址
+    let addr = "127.0.0.1:8080".to_string(); 
     let socket = TcpStream::connect(addr).await?;
 
     println!("Connected to the server!");
 
     let (mut rd, mut wr) = io::split(socket);
 
-
-
     wr.write_all(&input.to_vec()).await.expect("Failed to write to socket");
-
 
     let mut buf = vec![0; 1024]; // TODO: fix it
 
@@ -353,8 +239,7 @@ pub async fn comm_with_server(input: &[u8; 2]) -> Result<(), Box<dyn Error>> {
 
 
 pub async fn conn_socket(socket: & mut TcpStream) -> Result<(), Box<dyn Error>> {
-    // 连接到服务器
-    let addr = "127.0.0.1:8080".to_string(); // 替换为服务器的 IP 地址
+    let addr = "127.0.0.1:8080".to_string();
     *socket = TcpStream::connect(addr).await.unwrap();
 
    Ok(())
@@ -379,7 +264,6 @@ pub async fn receive_message_type(socket: &mut tokio::net::TcpStream,
 pub async fn receive_init_map(socket: &mut tokio::net::TcpStream, 
         matrix: &mut Vec<Vec<u8>>) {
     // todo: cant always be 64, 32
-    // let mut buffer: Vec::<Vec::<u8>> = vec![vec![0_u8; 128]; 32];
     let mut _buffer: [u8; 64*32] = [0; 64*32];
     socket.read(&mut _buffer).await.unwrap();
     for i in 0..32 {

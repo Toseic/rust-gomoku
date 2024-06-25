@@ -1,6 +1,9 @@
 #![allow(non_camel_case_types)]
 
 
+use std::os::unix::io::AsRawFd;
+
+
 type c_int = i32;
 #[cfg(target_os = "macos")]
 type c_ulong = u64;
@@ -57,7 +60,6 @@ pub fn hide_cursor() {
 }
 
 pub fn set_mode(enable: bool) {
-    use std::os::unix::io::AsRawFd;
     let stdin_fd = std::io::stdin().as_raw_fd();
     let mut termios = unsafe {
         let mut termios = std::mem::MaybeUninit::<Termios>::uninit();
@@ -97,7 +99,6 @@ pub fn get_dimensions() -> Result<Dimensions, &'static str> {
         _ws_ypixel: u16, // unused
     }
 
-    use std::os::unix::io::AsRawFd;
     let stdin_fd = std::io::stdin().as_raw_fd();
 
     let winsize = unsafe {

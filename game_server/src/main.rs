@@ -1,17 +1,12 @@
-// use game_server::webserver;
 use game_server::webserver::{*};
 use tokio::net::TcpStream;
-// use tokio::io::};
-use std::time::Duration;
-use std::thread;
-
 
 
 #[tokio::main]
 async fn main() {
     let mut socket_vec: Vec<TcpStream> = Vec::new();
     collect_socket(& mut socket_vec).await.unwrap();
-    let sleep_duration = Duration::from_secs(2);
+
 
     //  init map
     let mut matrix: Vec::<Vec::<u8>> = vec![vec![0; 64]; 32];
@@ -23,6 +18,7 @@ async fn main() {
 
 
     let mut idx = 0;
+    let mut winner = -1;
     let mut change_vec = Vec::<(u8, u8, u8)>::new();
     let user_num = socket_vec.len();
     loop {
@@ -51,14 +47,35 @@ async fn main() {
             change_vec.push((user_input[0], user_input[1], user_id as u8));
             
 
-            // user win or continue\
+            // user win or continue
             // check if any user win or not 
-
+            winner = check_if_any_winner(&matrix,1 + user_id as usize);
+            if winner != -1 {
+                println!("user {} win", user_id);
+                break;
+            }
 
             user_id += 1;
 
         }
+        if winner != -1 {
+            break;
+        }
         idx += 1;
-        thread::sleep(sleep_duration);
+    }
+    let mut user_id = 1;
+    // send messages to all users
+    for socket in &mut socket_vec {
+        // send message type to user
+        if user_id == winner {
+            println!("send win message to user: {}", user_id);
+            send_message_type(socket, MessageType::Win).await;
+        } else {
+            println!("send lose message to user: {}", user_id);
+            send_message_type(socket, MessageType::Lose).await;
+        }
+
+        user_id += 1;
+
     }
 }
